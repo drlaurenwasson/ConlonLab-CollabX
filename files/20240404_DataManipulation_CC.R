@@ -142,6 +142,15 @@ colnames(cc_df2)<- c("PWK", "C57", "AJ", "129", "WSB", "CAS", "NZO", "NOD")
 write.table(cc_df, file = "cc_df.txt", sep = "\t", quote = F, row.names = TRUE, col.names = TRUE)
 write.table(cc_df2, file = "cc_df2.txt", sep = "\t", quote = F, row.names = TRUE, col.names = TRUE)
 
+
+
+
+
+
+
+
+
+#Beginnings of app plots
 #Make the data look like we want it to
 gene<- "Myh4"
 df<- as.data.frame(t(cc_df[rownames(cc_df)==gene,]))

@@ -14,6 +14,7 @@ library(plyr)
 library(shinythemes)
 library(shinysky)
 library(shinyBS)
+library(dplyr)
 
 # Define UI for application that takes collaborative cross 
 ui <- fluidPage(theme=shinytheme("cerulean"),
@@ -37,58 +38,93 @@ ui <- fluidPage(theme=shinytheme("cerulean"),
                          choiceNames = NULL,
                          choiceValues = NULL
       ),
-      selectInput(inputId = "normstrain", label = "Reference Strain", choices = c("PWK", "C57", "AJ", "129", "WSB", "CAS", "NZO", "NOD")),
+      selectInput(inputId = "normstrain", label = "Reference Strain", choices = c("C57", "PWK", "AJ", "129", "WSB", "CAS", "NZO", "NOD")),
       textInput(inputId = "proteinoi", 
-                label = "Protein(s) of Interest: (comma separated)", 
+                label = "Protein of Interest:", 
                 value = "", width = NULL, placeholder = NULL
       ),
       shiny::actionButton(inputId = "go", class = "btn btn-lg btn-primary", label = "Setup Complete")
     ),
     mainPanel(
-      #Create Tabs
-      tabsetPanel(id="expression", type = "tabs",
-                  tabPanel("Protein Expression Values"),
-                  # Allow input information from the "Setup" panel if necessary.
-                  shiny::uiOutput("Setup"),
-                  plotOutput(outputId = "scatterplot"),
-                  downloadButton("DownloadPlot", "Download Plot")
-                  ),
+      tabsetPanel(id="alltabs", type = "tabs",
+        tabPanel("Protein Abundance",
+                 shiny::uiOutput("Setup"),
+                 plotOutput("tab1expressionboxplot"),
+                 downloadButton("DownloadPlot", "Download Plot")
+                 ),
+        tabPanel("Male/Female Ratio",
+                 plotOutput("tab2expressionbarplot"),
+                 downloadButton("DownloadPlot2", "Download Plot")
+                 ),
+        tabPanel("Male/Female Ratio vs Ref Strain")
+      ),
     )
   )
 )
 
 server <- function(input, output, session) {
 
+  df=NULL
+  df2=NULL
+  colors=c("#F0E442", "#555555", "#009E73", "#0072B2", "#56B4E9", "#D55E00", "#CC79A7", "#E69F00" )
+  names(colors)<- c("AJ", "C57", "CAS", "NOD", "NZO", "PWK", "WSB", "129" )
+  
+  
   get_metadata<- reactive({
     proteinstouse<- input$proteinoi
     proteinstouse<-unlist(strsplit(proteinstouse, ","))
-    #print(proteinstouse)
+    print(proteinstouse)
     return(proteinstouse)
   })
   get_strains<- reactive({
     strainstouse<- input$strains
     strainstouse<-unlist(strsplit(strainstouse, ","))
-    #print(strainstouse)
+    print(strainstouse)
     return(strainstouse)
   })
   get_normalized_strain<- reactive({
     norm<- input$normstrain
-    #print(norm)
+    print(norm)
     return(norm)
   })
   
-  #df2=NULL
-  #df4=NULL
-  #dfrp=NULL
+  #Load in the collaborative cross data frame
+  cc_df <- read.table("https://github.com/drlaurenwasson/ConlonLab-CollabX/raw/main/files/cc_df.txt", sep = "\t")
+  genes<- rownames(cc_df)
+  cc_df2<- read.table("https://github.com/drlaurenwasson/ConlonLab-CollabX/raw/main/files/cc_df2.txt", sep = "\t")
+  colnames(cc_df2)[4]<- "129"
+  cc_df3<- read.table("https://github.com/drlaurenwasson/ConlonLab-CollabX/raw/main/files/cc_df3.txt", sep = "\t")
+  #Get a data frame for the proteins of interest for the strains of interest
+  getdata<- function(protein,strain){
+    allstrains<- c("PWK", "C57", "AJ", "129", "WSB", "CAS", "NZO", "NOD")
+    protein<- protein[protein %in% rownames(cc_df)]
+    df<- as.data.frame(t(cc_df[rownames(cc_df)==protein,]))
+    df$strain<- c(rep("PWK",4), rep("C57",4), rep("AJ",4), rep("129",4), rep("WSB",4), rep("CAS",4), rep("NZO",4), rep("NOD",4))
+    df$protein<- protein
+    colnames(df)[1]<-"Expression"
+    #Get all of the average expressions for each strain
+    avg<- c(mean(df$Expression[1:4]), mean(df$Expression[5:8]), mean(df$Expression[9:12]), mean(df$Expression[13:16]), mean(df$Expression[17:20]), mean(df$Expression[21:24]), mean(df$Expression[25:28]), mean(df$Expression[29:32]))
+    names(avg)<- unique(df$strain)
+    df$sex<- c("M", "F", "M", "F", "F", "F", "M",
+               "M", "F", "M", "F", "M", "M", "M",
+               "F", "F", "F", "M", "F", "M", "F", 
+               "M", "F", "M", "M", "F", "M", "F",
+               "M", "F", "M", "F")
+    df$ss<- paste(df$strain,df$sex)
+    return(df)
+  }
+  
   
   #When "Setup Complete" is pressed:
   shiny::observeEvent(input$go,{
+    #Update the tabs list
+    showTab(inputId = "alltabs", target = "Protein Expression")
     #Update the proteins list
     proteinsupdate<- get_metadata()
     output$proteinstouse<- shiny::renderText({proteinsupdate})
     #Update the strains to include
     strainsupdate<- get_strains()
-    output$strainstouse<- shiny::renderText({strainsMupdate})
+    output$strainstouse<- shiny::renderText({strainsupdate})
     #Update the time point to normalize to
     normalizeupdate<- get_normalized_strain()
     output$normalizedstrain<- shiny::renderText({normalizeupdate})
@@ -96,310 +132,67 @@ server <- function(input, output, session) {
     
     for (p in {proteinsupdate}){
       #Check to see if protein is in the database
-      if (p %in% rownames(rawvalues)){
-        a<- getdata(p,{timepointsupdate},{normalizeupdate})
-        df2=rbind(df2,a)
+      if (p %in% rownames(cc_df)){
+        a<- getdata(p,{strainsupdate})
+        df=rbind(df,a)
       }
-      
+      output$dataframe<- shiny::renderTable({
+        df}, rownames = TRUE
+      )
     }
-    #Subset only the timepoints you want
-    df2<- df2[df2$day %in% {timepointsupdate},]
-    #Plot the scatterplot
-    output$scatterplot <- renderPlot({
-      p<- ggplot(df2, aes(x=day, y=Normalized, group=protein, color=protein)) + 
-        geom_line() +
-        geom_point()+
-        geom_errorbar(aes(ymin=Normalized-sd, ymax=Normalized+sd), width=.2,
-                      position=position_dodge(0.05))
-      p=p+labs(title="Protein Expression", x="Day", y = "Avg. Abundance (Normalized)")+
-        theme_classic()
+    #Tab 1: Plot protein expression values
+    #Subset only the strains you want
+    df<- df[df$strain %in% {strainsupdate},]
+    print(df)
+    #Plot the box plot
+    p<- ggplot(df, aes(x=strain, y=Expression, group = ss, fill = ss)) + 
+      geom_boxplot() + labs(title=paste0("Normalized Protein Expression- ", sort(unique(df$protein))), x="Strain", y = "Avg. Abundance (Normalized)")+theme_classic() 
+    output$tab1expressionboxplot <- renderPlot({
       plot(p)
-      observeEvent(input$update, print(as.numeric(input$update)))
     })
-    p<- ggplot(df2, aes(x=day, y=Normalized, group=protein, color=protein)) + 
-      geom_line() +
-      geom_point()+
-      geom_errorbar(aes(ymin=Normalized-sd, ymax=Normalized+sd), width=.2,
-                    position=position_dodge(0.05))
-    p=p+labs(title="Protein Expression", x="Day", y = "Avg. Abundance (Normalized)")+
-      theme_classic()
     
     output$DownloadPlot = downloadHandler(
-      file= paste({proteinsupdate}, {timepointsupdate}, ".png", sep=""),
+      file= paste({proteinsupdate}, ".png", sep=""),
       content = function(file){
         ggsave(p, filename = file)
       }
     )
-  })
-  
-  #Load in the collaborative cross data frame
-  masterdf <- read.txt("https://github.com/drlaurenwasson/ConlonLab-MMExpression/raw/main/files/1-s2.0-S1534580723001818-mmc2.csv", row.names = 1)
-  genes<- masterdf$Gene.Symbol
-  rawvalues<- as.data.frame(masterdf[,29:52])
-  rownames(rawvalues)<- make.names(genes, unique = TRUE)
-  
-  #Get a Protein data frame for the proteins of interest
-  getdata<- function(protein,timepoint,normtp){
-    tp<- c("E09.5", "E10.5", "E11.5", "E12.5", "E13.5", "E14.5", "E15.5", "E16.5")
-    protein<- protein[protein %in% rownames(rawvalues)]
-    df<- as.data.frame(t(rawvalues[rownames(rawvalues)==protein,]))
-    df$day<- c(rep("E09.5",3), rep("E10.5",3), rep("E11.5",3), rep("E12.5",3), rep("E13.5",3), rep("E14.5",3), rep("E15.5",3), rep("E16.5",3))
-    df$protein<- protein
-    colnames(df)[1]<-"Expression"
-    #Get all of the average expressions for each time point
-    avg<- c(mean(df$Expression[1:3]), mean(df$Expression[4:6]), mean(df$Expression[7:9]), mean(df$Expression[10:12]), mean(df$Expression[13:15]), mean(df$Expression[16:18]), mean(df$Expression[19:21]), mean(df$Expression[22:24]))
-    names(avg)<- tp
-    #Normalize to the time point we want
-    df$Normalized<- df$Expression/(avg[names(avg) %in% normtp])
     
-    data_summary <- function(data, varname, groupnames){
-      require(plyr)
-      summary_func <- function(x, col){
-        c(mean = mean(x[[col]], na.rm=TRUE),
-          sd = sd(x[[col]], na.rm=TRUE))
-      }
-      data_sum<-ddply(data, groupnames, .fun=summary_func,
-                      varname)
-      data_sum <- rename(data_sum, c("mean" = varname))
-      return(data_sum)
-    }
-    df2 <- data_summary(df, varname="Normalized", 
-                        groupnames=c("day", "protein"))
-    head(df2)
-    return(df2)
-  }
-  
-  #RNA functions
-  ## Get Metadata
-  get_metadata_rna<- reactive({
-    rnastouse<- input$rnaoi
-    rnastouse<-unlist(strsplit(rnastouse, ","))
-    #print(strainstouse)
-    return(rnastouse)
-  })
-  get_timepoints_rna<- reactive({
-    rnatimepointstouse <- input$rnatimepoint
-    #print(timepointstouse)
-    return(rnatimepointstouse)
-  })
-  get_normalized_timepoint_rna<- reactive({
-    rnanormtimepoint<- input$normalize2
-    #print(normtimepoint)
-    return(rnanormtimepoint)
-  })
-  
-  #Load in the RNA data frame
-  rnavalues<- read.table("https://raw.githubusercontent.com/drlaurenwasson/ConlonLab-MMExpression/main/files/dds_combined_normalized_counts_proteingenes.txt", sep = "\t")
-  #Get an RNA data frame for the RNAs of interest
-  getdatarna<- function(gene, rtimepoint, rnormtp){
-    rtp<- c("E09.5", "E10.5", "E12.5", "E14.5", "E16.5")
-    gene<- gene[gene %in% rownames(rnavalues)]
-    df3<- as.data.frame(t(rnavalues[rownames(rnavalues)==gene,]))
-    df3$day<- c(rep("E09.5",3), rep("E10.5",3), rep("E12.5",3), rep("E14.5",3), rep("E16.5",3))
-    df3$gene<- gene
-    colnames(df3)[1]<-"Expression"
-    #Get normalized data
-    ravg<- c(mean(df3$Expression[1:3]), mean(df3$Expression[4:6]), mean(df3$Expression[7:9]), mean(df3$Expression[10:12]), mean(df3$Expression[13:15]))
-    names(ravg)<- rtp
-    #Normalize to the time point we want
-    df3$Normalized<- df3$Expression/(ravg[names(ravg) %in% rnormtp])
-    
-    data_summary2 <- function(data, varname, groupnames){
-      require(plyr)
-      summary_func2 <- function(x, col){
-        c(mean = mean(x[[col]], na.rm=TRUE),
-          sd = sd(x[[col]], na.rm=TRUE))
-      }
-      data_sum2<-ddply(data, groupnames, .fun=summary_func2,
-                       varname)
-      data_sum2 <- rename(data_sum2, c("mean" = varname))
-      return(data_sum2)
-    }
-    df4 <- data_summary2(df3, varname="Normalized", 
-                         groupnames=c("day", "gene"))
-    head(df4)
-    return(df4)
-  }
-  
-  #When "rnaupdate" is pressed
-  shiny::observeEvent(input$rnaupdate,{
-    #Update the RNA list
-    rnaupdate<- get_metadata_rna()
-    output$rnasstouse<- shiny::renderText({rnaupdate})
-    #Update the time points to include
-    rnatimepointsupdate<- get_timepoints_rna()
-    output$rnatimepointstouse<- shiny::renderText({rnatimepointsupdate})
-    #Update the time point to normalize to
-    rnanormalizeupdate<- get_normalized_timepoint_rna()
-    output$rnanormalizedtimepoint<- shiny::renderText({rnanormalizeupdate})
-    
-    #Get the data for the genes we want and the time points we want
-    #A "for loop" iterates through all x in y. In this example, it will perform the code inside the {} for every gene in the variable 'genes' that I defined above.
-    for (rna in {rnaupdate}){
-      #Check to see if rna is in the database
-      if (rna %in% rownames(rnavalues)){
-        b<- getdatarna(rna,{rnatimepointsupdate},{rnanormalizeupdate})
-        df4=rbind(df4,b)
-      }
-      
-    }
-    #Subset only the timepoints you want
-    df4<- df4[df4$day %in% {rnatimepointsupdate},]
-    #Plot the scatterplot
-    output$rnascatterplot <- renderPlot({
-      p2<- ggplot(df4, aes(x=day, y=Normalized, group=gene, color=gene)) + 
-        geom_line() +
-        geom_point() + 
-        geom_errorbar(aes(ymin=Normalized-sd, ymax=Normalized+sd), width=.2,
-                      position=position_dodge(0.05))
-      p2<- p2+labs(title="RNA Expression", x="Day", y = "Avg. Abundance (Normalized)")+
-        theme_classic() 
+    #Tab 2: Plot male to female ratio
+    df2<- as.data.frame(t(cc_df2[rownames(cc_df2)=={proteinsupdate},]))
+    df2$strain<- colnames(cc_df2)
+    df2$strain[4]<- "129"
+    df2$strain<- factor(df2$strain, levels=c("AJ","C57","129","NOD", "NZO", "CAS", "PWK", "WSB"))
+    colnames(df2)[1]<-"Log2FC"
+    df2$color<- c("#D55E00", "#555555", "#F0E442", "#E69F00", "#CC79A7", "#009E73", "#56B4E9", "#0072B2" )
+    #Subset the rows you want
+    df2<- df2[df2$strain %in% {strainsupdate},]
+    p2<- ggplot(df2,aes(x=strain, y=Log2FC))+
+      geom_bar(stat="identity", fill = df2$color ) 
+    p2<- p2+labs(title=paste0("Normalized Protein Expression- ", {proteinsupdate}), x="Strain", y = "Log2FC M/F")+
+      theme_classic() 
+    output$tab2expressionbarplot <- renderPlot({
       plot(p2)
-      observeEvent(input$rnaupdate, print(as.numeric(input$rnaupdate)))
     })
     
-    
-    output$rnaDownloadPlot = downloadHandler(
-      file= paste({rnaupdate}, {rnatimepointsupdate}, ".png", sep=""),
-      content = function(file){
-        ggsave(p, filename = file)
-      }
-    )
+    #Tab 3: Normalize to the reference strain
+    df3<- df2
+    df3test<- as.data.frame(t(cc_df3[rownames(cc_df3)=={proteinsupdate},]))
+    df3test$strain<- colnames(cc_df3)
+    df3test$strain[4]<- "129"
+    df3test$strain<- factor(df3test$strain, levels=c("AJ","C57","129","NOD", "NZO", "CAS", "PWK", "WSB"))
+    colnames(df3test)[1]<-"Log2FC"
+    df3test$color<- c("#D55E00", "#555555", "#F0E442", "#E69F00", "#CC79A7", "#009E73", "#56B4E9", "#0072B2" )
+    #Subset the rows you want
+    df3test<- df3test[df3test$strain %in% {strainsupdate},]
+    p2<- ggplot(df3test,aes(x=strain, y=Log2FC))+
+      geom_bar(stat="identity", fill = df2$color ) 
+    p2<- p2+labs(title=paste0("Normalized Protein Expression- ", {proteinsupdate}), x="Strain", y = "Log2FC M/F")+
+      theme_classic() 
+    output$tab2expressionbarplot <- renderPlot({
+      plot(p2)
   })
-  
-  #RNA + Protein Functions
-  ## Get metadata
-  get_metadata_rnaprotein<- reactive({
-    rnaprotstouse<- input$rnaproteinoi
-    rnaprotstouse<-unlist(strsplit(rnaprotstouse, ","))
-    return(rnaprotstouse)
-  })
-  #Get the RNA time points
-  get_timepoints_rnaproteinr<- reactive({
-    rnaproteintimepointstouser <- input$rnaproteintimepointr
-    return(rnaproteintimepointstouser)
-  })
-  #Get the protein time points
-  get_timepoints_rnaproteinp<- reactive({
-    rnaproteintimepointstousep <- input$rnaproteintimepointp
-    return(rnaproteintimepointstousep)
-  })
-  #Get the normalized time point
-  get_normalized_timepointrp<- reactive({
-    normtimepoint<- input$normalize3
-    return(normtimepoint)
-  })
-  #Get a data frame for the RNAs of interest
-  getdatarnaprotein<- function(gene, rnatimepoint, proteintimepoint, normtpr){
-    #Get the RNA
-    rtp<- c("E09.5", "E10.5", "E12.5", "E14.5", "E16.5")
-    gene<- gene[gene %in% rownames(rnavalues)]
-    df3<- as.data.frame(t(rnavalues[rownames(rnavalues)==gene,]))
-    df3$day<- c(rep("E09.5",3), rep("E10.5",3), rep("E12.5",3), rep("E14.5",3), rep("E16.5",3))
-    df3$gene<- gene
-    colnames(df3)[1]<-"Expression"
-    #Get normalized data
-    ravg<- c(mean(df3$Expression[1:3]), mean(df3$Expression[4:6]), mean(df3$Expression[7:9]), mean(df3$Expression[10:12]), mean(df3$Expression[13:15]))
-    names(ravg)<- rtp
-    #Normalize to the time point we want
-    df3$Normalized<- df3$Expression/(ravg[names(ravg) %in% normtpr])
-    data_summary2 <- function(data, varname, groupnames){
-      require(plyr)
-      summary_func2 <- function(x, col){
-        c(mean = mean(x[[col]], na.rm=TRUE),
-          sd = sd(x[[col]], na.rm=TRUE))
-      }
-      data_sum2<-ddply(data, groupnames, .fun=summary_func2,
-                       varname)
-      data_sum2 <- rename(data_sum2, c("mean" = varname))
-      return(data_sum2)
-    }
-    df4 <- data_summary2(df3, varname="Normalized", 
-                         groupnames=c("day", "gene"))
-    #Get the Protein
-    ptp<- c("E09.5", "E10.5", "E11.5", "E12.5", "E13.5", "E14.5", "E15.5", "E16.5")
-    normtpp<- normtpr
-    protein=gene
-    protein<- protein[protein %in% rownames(rawvalues)]
-    df5<- as.data.frame(t(rawvalues[rownames(rawvalues)==protein,]))
-    df5$day<- c(rep("E09.5",3), rep("E10.5",3), rep("E11.5",3), rep("E12.5",3), rep("E13.5",3), rep("E14.5",3), rep("E15.5",3), rep("E16.5",3))
-    df5$gene<- protein
-    colnames(df5)[1]<-"Expression"
-    #Get all of the average expressions for each time point
-    avg<- c(mean(df5$Expression[1:3]), mean(df5$Expression[4:6]), mean(df5$Expression[7:9]), mean(df5$Expression[10:12]), mean(df5$Expression[13:15]), mean(df5$Expression[16:18]), mean(df5$Expression[19:21]), mean(df5$Expression[22:24]))
-    names(avg)<- ptp
-    #Normalize to the time point we want
-    df5$Normalized<- df5$Expression/(avg[names(avg) %in% normtpp])
-    
-    data_summary <- function(data, varname, groupnames){
-      require(plyr)
-      summary_func <- function(x, col){
-        c(mean = mean(x[[col]], na.rm=TRUE),
-          sd = sd(x[[col]], na.rm=TRUE))
-      }
-      data_sum<-ddply(data, groupnames, .fun=summary_func,
-                      varname)
-      data_sum <- plyr::rename(data_sum, c("mean" = varname))
-      return(data_sum)
-    }
-    df6 <- data_summary(df5, varname="Normalized", 
-                        groupnames=c("day", "gene"))
-    df4$data<- "RNA"
-    df6$data<- "Protein"
-    df7<- rbind(df4,df6)
-    return(df7)
-  }
-  
-  
-  #When "rnaproteinupdate" is pressed
-  shiny::observeEvent(input$rnaprotupdate,{
-    #Update the RNA list
-    rnaprotupdater<- get_metadata_rnaprotein()
-    output$rnasprotstouser<- shiny::renderText({rnaprotupdater})
-    #Update the Protein time points to include
-    rnaprottimepointsupdatep<- get_timepoints_rnaproteinp()
-    output$rnaprottimepointstousep<- shiny::renderText({rnaprottimepointsupdatep})
-    #Update the RNA time points to include
-    rnaprottimepointsupdater<- get_timepoints_rnaproteinr()
-    output$rnaprottimepointstouser<- shiny::renderText({rnaprottimepointsupdater})
-    #Update the normalization time point
-    rnaprotnormalizeupdate<- get_normalized_timepointrp()
-    output$rnaprotnormalizedtimepoint<- shiny::renderText({rnaprotnormalizeupdate})
-    
-    #Get the data for the genes we want and the time points we want
-    #A "for loop" iterates through all x in y. In this example, it will perform the code inside the {} for every gene in the variable 'genes' that I defined above.
-    for (rna in {rnaprotupdater}){
-      #Check to see if rna is in the database
-      if (rna %in% rownames(rnavalues)){
-        b<- getdatarnaprotein(rna,{rnaprottimepointsupdater}, {rnaprottimepointsupdatep},{rnaprotnormalizeupdate})
-        dfrp=rbind(dfrp,b)
-      }
-      
-    }
-    #Subset only the timepoints you want
-    dfrp$group<- paste0(dfrp$gene,dfrp$data)
-    dfrp<- dfrp[dfrp$day %in% c({rnaprottimepointsupdater},{rnaprottimepointsupdatep}),]
-    sf <- max(dfrp$Normalized)
-    #Plot the scatterplot
-    output$rnaprotscatter <- renderPlot({
-      p3<- ggplot(dfrp) +
-        geom_line(aes(x=day, y=Normalized, group=group, color=gene)) +
-        geom_point(aes(x=day, y=Normalized, group=group, color=gene, shape = data),size = 2) + 
-        scale_y_continuous(name = "RNA Expression", sec.axis = sec_axis( ~.*sf, name="Protein Expression")) + 
-        guides(colour = guide_legend(override.aes = list(size=2)))
-      p3<- p3+labs(title="RNA/Protein Expression")+
-        theme_classic() 
-      plot(p3)
-      observeEvent(input$rnaprotupdate, print(as.numeric(input$rnaprotupdate)))
-    })
-    
-    output$rnaprotDownloadPlot = downloadHandler(
-      file= paste({rnaprotupdate}, {rnaprottimepointsupdatep}, {rnaprottimepointsupdater},".png", sep=""),
-      content = function(file){
-        ggsave(p, filename = file)
-      }
-    )
-  })
+
 }
 
 # Run the application 
