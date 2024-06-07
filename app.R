@@ -179,7 +179,7 @@ server <- function(input, output, session) {
     })
     
     output$DownloadPlot2 = downloadHandler(
-      file= paste({proteinsupdate}, "adjusted.png", sep=""),
+      file= paste({proteinsupdate}, "log2.png", sep=""),
       content = function(file){
         ggsave(p2, filename = file)
       }
@@ -204,7 +204,7 @@ server <- function(input, output, session) {
     })
     
     output$DownloadPlot3 = downloadHandler(
-      file= paste({proteinsupdate}, ".png", sep=""),
+      file= paste({proteinsupdate}, "adjusted.png", sep=""),
       content = function(file){
         ggsave(p3, filename = file)
       }
