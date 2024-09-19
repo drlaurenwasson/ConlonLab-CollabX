@@ -93,8 +93,10 @@ server <- function(input, output, session) {
   genes<- rownames(cc_df)
   cc_df2<- read.table("https://github.com/drlaurenwasson/ConlonLab-CollabX/raw/main/files/cc_df2.txt", sep = "\t")
   colnames(cc_df2)[4]<- "129"
+  rownames(cc_df2)<- genes
   cc_df3<- read.table("https://github.com/drlaurenwasson/ConlonLab-CollabX/raw/main/files/cc_df3.txt", sep = "\t")
   colnames(cc_df3)[4]<- "129"
+  rownames(cc_df3) = genes
   #Get a data frame for the proteins of interest for the strains of interest
   getdata<- function(protein,strain){
     allstrains<- c("PWK", "C57", "AJ", "129", "WSB", "CAS", "NZO", "NOD")
