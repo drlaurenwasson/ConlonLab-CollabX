@@ -6,7 +6,7 @@ library(tidyverse)
 library(ggpattern)
 
 #Load in the table for collaborative cross
-s1c <- read_excel("NIHMS1806954-supplement-Table_S1__Differentially_expressed_genes_or_proteins_in_specific_experiments_or_analyses___S1A-P_.xlsx", sheet = "S1C")
+s1c <- read_excel("files/NIHMS1806954-supplement-Table_S1__Differentially_expressed_genes_or_proteins_in_specific_experiments_or_analyses___S1A-P_.xlsx", sheet = "S1C")
 View(s1c)
 genes<- make.names(s1c$Gene, unique = TRUE)
 s1c<- s1c[,24:59]
