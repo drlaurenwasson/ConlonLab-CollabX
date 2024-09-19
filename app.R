@@ -89,7 +89,7 @@ server <- function(input, output, session) {
   })
   
   #Load in the collaborative cross data frame
-  cc_df <- read.table("https://github.com/drlaurenwasson/ConlonLab-CollabX/raw/main/files/cc_df.txt", sep = "\t", row.names = 1)
+  cc_df <- read.table("files/cc_df.txt", sep = "\t", row.names = 1)
   genes<- rownames(cc_df)
   cc_df2<- read.table("https://github.com/drlaurenwasson/ConlonLab-CollabX/raw/main/files/cc_df2.txt", sep = "\t")
   colnames(cc_df2)[4]<- "129"
