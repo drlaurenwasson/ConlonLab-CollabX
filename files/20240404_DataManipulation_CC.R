@@ -6,7 +6,7 @@ library(tidyverse)
 library(ggpattern)
 
 #Load in the table for collaborative cross
-s1c <- read_excel("files/NIHMS1806954-supplement-Table_S1__Differentially_expressed_genes_or_proteins_in_specific_experiments_or_analyses___S1A-P_.xlsx", sheet = "S1C")
+s1c <- read_excel("NIHMS1806954-supplement-Table_S1__Differentially_expressed_genes_or_proteins_in_specific_experiments_or_analyses___S1A-P_.xlsx", sheet = "S1C")
 View(s1c)
 genes<- make.names(s1c$Gene, unique = TRUE)
 s1c<- s1c[,24:59]
@@ -148,7 +148,7 @@ cc_df3<- as.data.frame(cbind(pwk2[,7],c572[,7],aj2[,7],s1292[,7],wsb2[,7],cas2[,
 
 rownames(cc_df2)<- genes
 colnames(cc_df2)<- c("PWK", "C57", "AJ", "129", "WSB", "CAS", "NZO", "NOD")
-write.table(cc_df, file = "cc_df.txt", sep = "\t", quote = F, row.names = TRUE, col.names = TRUE)
+write.table(cc_df, file = "files/cc_df.txt", sep = "\t", quote = F, row.names = TRUE, col.names = TRUE)
 write.table(cc_df2, file = "cc_df2.txt", sep = "\t", quote = F, row.names = TRUE, col.names = TRUE)
 
 rownames(cc_df3)<- genes
